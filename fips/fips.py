@@ -4,6 +4,7 @@ from io import StringIO
 import re
 import csv
 import csv
+from contextlib import suppress
 try:
     from lxml import etree
     from lxml.html import fromstring
@@ -47,6 +48,14 @@ def parse_fields(html):
             if searched != None:
                 field_code = searched.group(1)
                 # paragraf_with_field.append(element)
+                if field_code=="43":
+                    with suppress(Exception):
+                        patent_field["43_href"]=element.xpath("descendant::b[position()=1]/a")[0].attrib["href"]
+                if field_code=="45":
+                    with suppress(Exception):
+                        patent_field["45_href"]=element.xpath("descendant::b[position()=1]/a")[0].attrib["href"]
+                # if field_code=="21" or field_code=="22":
+                #     patent_field["21_href"]=element.xpath("descendant::a")[0].attrib["href"]
                 bold_ = element.xpath("descendant-or-self::*/b")
                 if len(bold_) > 0:
                     bold= bold_[0]
@@ -59,6 +68,8 @@ def parse_fields(html):
                 if len(bold_child) == 0 and bold.text == None:
                     continue
                 if field_code=="21" or field_code=="22":
+                    with suppress(Exception):
+                        patent_field["21_href"]=element.xpath("descendant::a")[0].attrib["href"]
                     for child in bold_child:
                         if child.text != None:
                             patent_field["21"]=child.text
@@ -77,12 +88,25 @@ def parse_fields(html):
     ########################################################################
     ####  top items    ########################
     #######################################################################
-    patent_field["19"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text
-    patent_field["13"]=body.xpath("descendant-or-self::*[@id='top6']")[0].text
-    patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text
-    patent_field["12"]=body.xpath("descendant-or-self::*[@id='NameDoc']/b[.!='']")[0].text.strip()
-    all_codes=body.xpath("descendant-or-self::*[@class='top7']/*[@class='ipc']/li/a")
-    patent_field["51"]="; ".join([code.text_content() for code in all_codes])
+    with suppress(Exception):
+        patent_field["19"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text
+    with suppress(Exception):
+        patent_field["13"]=body.xpath("descendant-or-self::*[@id='top6']")[0].text
+    with suppress(Exception):
+        patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text
+    with suppress(Exception):
+        patent_field["12"]=body.xpath("descendant-or-self::*[@id='NameDoc']/b[.!='']")[0].text.strip()
+    with suppress(Exception):
+        all_codes=body.xpath("descendant-or-self::*[@class='top7']/*[@class='ipc']/li/a")
+        patent_field["51"]="; ".join([code.text_content() for code in all_codes])
+    with suppress(Exception):
+        patent_field["98"]=body.xpath("descendant-or-self::*[contains(.,'Адрес для переписки')]/b")[0].text
+    with suppress(Exception):
+        patent_field["11_href"]=body.xpath("descendant-or-self::*[@id='top4']/a")[0].attrib["href"]
+    with suppress(Exception):
+        patent_field["21_href"]=body.xpath("descendant-or-self::*[@id='top4']/a")[0].attrib["href"]
+    with suppress(Exception):
+        patent_field["21_href"]=body.xpath("descendant-or-self::*[@id='top4']/a")[0].attrib["href"]
     return patent_field
 
 
