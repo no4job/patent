@@ -3,7 +3,8 @@ import json
 from io import StringIO
 import re
 import csv
-import csv
+import csv_tools
+import os
 from contextlib import suppress
 try:
     from lxml import etree
@@ -16,6 +17,8 @@ class dialect_tab(csv.excel):
     delimiter = '\t'
 
 INID_CODE_LIST_FILE = "inid.txt"
+FIPS_PATENT = 1
+FIPS_SOFT = 2
 
 def get_html(json_file):
     parsed =  json.load(json_file)
@@ -25,14 +28,33 @@ def get_html(json_file):
     # print(html)
     return html
 
-def parse_fields(html):
+def test_for_fips_patent_file(file):
+    with open(file,mode = "r",encoding = "utf8") as input_file:
+        str = re.sub("(\\r\\n)+|(\\n)+"," ",input_file.read())
+        result = re.search("\\(19\\).+\\(11\\).+\\(13\\)",str)
+    if result:
+        return True
+    else:
+        return False
+
+def test_for_fips_soft_file(file):
+    with open(file,mode = "r",encoding = "utf8") as input_file:
+        str = re.sub("(\\r\\n)+|(\\n)+"," ",input_file.read())
+        result_1 = re.search("\\(12\\).+ГОСУДАРСТВЕННАЯ РЕГИСТРАЦИЯ ПРОГРАММЫ ДЛЯ ЭВМ",str)
+        result_2 = re.search("\\(12\\).+ГОСУДАРСТВЕННАЯ РЕГИСТРАЦИЯ БАЗЫ ДАННЫХ",str)
+    if result_1 or result_2:
+        return True
+    else:
+        return False
+def parse_fields_fips_patent(html):
+    html=re.sub("(\\r\\n)+|(\\n)+"," ",html)
     parser = etree.HTMLParser()
     # doc_tree = etree.parse(StringIO(html),parser)#parse string cleaned from \n as io stream
     # root = doc_tree.getroot()
     root = fromstring(html)
-    print(type(root))
+    # print(type(root))
     body = root.xpath("descendant-or-self::body")[0]
-    print(type(body))
+    # print(type(body))
     # body = doc_tree.find('body')
     # fields=body.xpath("descendant-or-self::*[@class]")
     ########################################################################
@@ -63,7 +85,7 @@ def parse_fields(html):
                     continue
                 bold_child=bold.xpath("child::*")
                 if len(bold_child) == 0 and bold.text != None:
-                    patent_field[field_code] = bold.text
+                    patent_field[field_code] = bold.text.strip()
                     continue
                 if len(bold_child) == 0 and bold.text == None:
                     continue
@@ -72,45 +94,161 @@ def parse_fields(html):
                         patent_field["21_href"]=element.xpath("descendant::a")[0].attrib["href"]
                     for child in bold_child:
                         if child.text != None:
-                            patent_field["21"]=child.text
+                            patent_field["21"]=child.text.strip()
                             if child.tail != None:
-                                patent_field["22"]=child.tail
+                                patent_field["22"]=re.sub("^\s*,","",child.tail.strip())
                             break
                     continue
-                all_text=""
-                print (etree.tostring(bold, pretty_print=True))
+                if bold.text != None:
+                    all_text = bold.text
+                else:
+                    all_text=""
+                # print (etree.tostring(bold, pretty_print=True))
                 for child in bold_child:
                     if child.text != None:
-                        all_text+=" " + child.text
+                        all_text+=" " + child.text.strip()
                     if child.tail != None:
-                        all_text+=" " + child.tail
+                        all_text+=" " + child.tail.strip()
                 patent_field[field_code]=all_text
     ########################################################################
     ####  top items    ########################
     #######################################################################
     with suppress(Exception):
-        patent_field["19"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text
+        patent_field["19"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text.strip()
     with suppress(Exception):
-        patent_field["13"]=body.xpath("descendant-or-self::*[@id='top6']")[0].text
+        patent_field["13"]=body.xpath("descendant-or-self::*[@id='top6']")[0].text.strip()
     with suppress(Exception):
-        patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text
+        patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text.strip()
     with suppress(Exception):
         patent_field["12"]=body.xpath("descendant-or-self::*[@id='NameDoc']/b[.!='']")[0].text.strip()
     with suppress(Exception):
         all_codes=body.xpath("descendant-or-self::*[@class='top7']/*[@class='ipc']/li/a")
-        patent_field["51"]="; ".join([code.text_content() for code in all_codes])
+        patent_field["51"]="; ".join([code.text_content().strip() for code in all_codes])
     with suppress(Exception):
-        patent_field["98"]=body.xpath("descendant-or-self::*[contains(.,'Адрес для переписки')]/b")[0].text
+        patent_field["98"]=body.xpath("descendant-or-self::*[contains(.,'Адрес для переписки')]/b")[0].text.strip()
     with suppress(Exception):
         patent_field["11_href"]=body.xpath("descendant-or-self::*[@id='top4']/a")[0].attrib["href"]
     with suppress(Exception):
         patent_field["21_href"]=body.xpath("descendant-or-self::*[@id='top4']/a")[0].attrib["href"]
     with suppress(Exception):
         patent_field["21_href"]=body.xpath("descendant-or-self::*[@id='top4']/a")[0].attrib["href"]
+    with suppress(Exception):
+        left_column=body.xpath("descendant-or-self::*[@id='StatusL']")[0]
+        left_column_rows = get_rows(left_column)
+        right_column=body.xpath("descendant-or-self::*[@id='StatusR']")[0]
+        right_column_rows = get_rows(right_column)
+        patent_field["status"]= concat_columns_by_row(left_column_rows,right_column_rows," ",";")
+
     return patent_field
 
+def parse_fields_fips_soft(html):
+    html=re.sub("(\\r\\n)+|(\\n)+"," ",html)
+    parser = etree.HTMLParser()
+    root = fromstring(html)
+    body = root.xpath("descendant-or-self::body")[0]
 
+    ########################################################################
+    ####  subitems of item 12 patent description   ########################
+    #######################################################################
+    inid_search_pattern_str = "^\\s*"+inid_search_pattern()+".*"
+    paragraph=body.xpath("descendant-or-self::*/p")
+    patent_field={}
+    ########################################################################
+    ####  top items    ########################
+    #######################################################################
+    with suppress(Exception):
+        patent_field["19"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text.strip()
+    with suppress(Exception):
+        patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text.strip()
+    with suppress(Exception):
+        patent_field["12"]=body.xpath("descendant-or-self::*[@id='NameDoc']/b[.!='']")[0].text.strip()
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Номер регистрации (свидетельства)')]/descendant::a"
+        patent_field["Номер регистрации (свидетельства)"]=body.xpath(xpath_str)[0].text.strip()
+        patent_field["Номер регистрации (свидетельства)_href"]=body.xpath(xpath_str)[0].attrib["href"]
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Дата регистрации')]/descendant::b"
+        patent_field["Дата регистрации"]=body.xpath(xpath_str)[0].text.strip()
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Номер и дата поступления заявки')]/descendant::b"
+        all_text = re.split(" ",body.xpath(xpath_str)[0].text.strip())
+        patent_field["Номер поступления заявки"]=all_text[0]
+        patent_field["Дата поступления заявки"]=all_text[1]
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Дата публикации')]/descendant::a"
+        patent_field["Дата публикации"]=body.xpath(xpath_str)[0].text.strip()
+        patent_field["Дата публикации_href"]=body.xpath(xpath_str)[0].attrib["href"]
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Контактные реквизиты')]/descendant::b"
+        patent_field["Контактные реквизиты"]=body.xpath(xpath_str)[0].text.strip()
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Автор')]/descendant::b"
+        element =body.xpath(xpath_str)[0]
+        rows = get_rows(element)
+        patent_field["Автор"]="; ".join(map(trim_signes,rows))
+    with suppress(Exception):
+        xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Правообладател')]/descendant::b"
+        element =body.xpath(xpath_str)[0]
+        rows = get_rows(element)
+        patent_field["Правообладатель"]="; ".join(map(trim_signes,rows))
+    with suppress(Exception):
+        xpath_str="descendant::p[contains(.,'Название базы данных')]/descendant::b"
+        patent_field["Название базы данных"]=body.xpath(xpath_str)[0].text_content().strip()
+    with suppress(Exception):
+        xpath_str="descendant::p[contains(.,'Название программы для ЭВМ')]/descendant::b"
+        patent_field["Название программы для ЭВМ"]=body.xpath(xpath_str)[0].text_content().strip()
+    with suppress(Exception):
+        xpath_str="descendant::b[contains(.,'Тип реализующей ЭВМ')]"
+        patent_field["Тип реализующей ЭВМ"]=body.xpath(xpath_str)[0].tail.strip()
+    with suppress(Exception):
+        xpath_str="descendant::b[contains(.,'Вид и версия системы управления базой данных')]"
+        patent_field["Вид и версия системы управления базой данных"]=body.xpath(xpath_str)[0].tail.strip()
+    with suppress(Exception):
+        xpath_str="descendant::b[contains(.,'Вид и версия операционной системы')]"
+        patent_field["Вид и версия операционной системы"]=body.xpath(xpath_str)[0].tail.strip()
+    with suppress(Exception):
+        xpath_str="descendant::b[contains(.,'Объем базы данных')]"
+        patent_field["Объем базы данных"]=body.xpath(xpath_str)[0].tail.strip()
+    with suppress(Exception):
+        xpath_str="descendant::b[contains(.,'Язык программирования')]"
+        patent_field["Язык программирования"]=body.xpath(xpath_str)[0].tail.strip()
+    with suppress(Exception):
+        xpath_str="descendant::b[contains(.,'Объем программы для ЭВМ')]"
+        patent_field["Объем программы для ЭВМ"]=body.xpath(xpath_str)[0].tail.strip()
+    with suppress(Exception):
+        xpath_str="descendant::p[@class='NameIzv']"
+        izv_type=body.xpath(xpath_str)[0].text.strip()
+        xpath_str="descendant::p[@class='NameIzv']/following-sibling::p[contains(@class,'izv')]"
+        izv_rows=body.xpath(xpath_str)
+        patent_field["Извещения об изменениях сведений"] = izv_type + "; " + "; ".join([row.text_content().strip() for row in izv_rows])
+        # print (patent_field["Извещения об изменениях сведений"])
+        xpath_str="descendant::p[@class='NameIzv']/following-sibling::p[contains(@class,'izv')]/descendant::a"
+        izv_href=body.xpath(xpath_str)
+        patent_field["Извещения об изменениях сведений_href"] = "; ".join([element.attrib["href"] for element in izv_href])
 
+    return patent_field
+
+def filter_blank(str):
+    return re.sub("\\s\\s\\s*"," ",str).strip()
+def trim_leading_signes(str):
+    return re.sub("^\s*[,;]+","",str)
+def trim_trailing_signes(str):
+    return re.sub("[,;]+\s*$","",str)
+def trim_signes(str):
+    return trim_trailing_signes(trim_leading_signes(str))
+def get_rows(element):
+    element_str=etree.tostring(element).decode("utf-8")
+    element_str = re.sub("<br>|<br/>"," #@# ",element_str)
+    element_ = fromstring(element_str)
+    all_text = element_.text_content()
+    all_rows = re.split("#@#",all_text)
+    all_rows = [row.strip() for row in all_rows]
+    return all_rows
+
+def concat_columns_by_row(list_l,list_r, column_separator,row_separator):
+    rows = map(column_separator.join,zip(list_l,list_r))
+    out_str = row_separator.join(rows)
+    return out_str
 
 def inid_search_pattern():
     pattern=""
@@ -133,11 +271,83 @@ def inid_code_list():
             inid_code_list[element[0]] = element[1]
         return inid_code_list
 
+def get_file_list(dir_path,data_type):
+    file_list=[]
+    if data_type == FIPS_PATENT:
+        pattern = "^index_[0-9]*\\.html$"
+        test_function = test_for_fips_patent_file
+    if data_type == FIPS_SOFT:
+        pattern = "^index_[0-9]*\\.html$"
+        test_function = test_for_fips_soft_file
+    for subdir, dirs, files in os.walk(dir_path):
+        for file in files:
+            file_path = os.path.join(subdir, file)
+    # for file in os.listdir(dir_path):
+            if re.match(pattern,file) and test_function(file_path):
+                file_list.append(file_path)
+    return file_list
+
+def parse_files(file_list,data_type):
+    if data_type == FIPS_PATENT:
+        parse_function =  parse_fields_fips_patent
+    if data_type == FIPS_SOFT:
+        parse_function =  parse_fields_fips_soft
+    patent_list=[]
+    for file in file_list:
+        with open(file,mode = "r",encoding = "utf8") as input_file:
+            patent_list.append(parse_function(input_file.read()))
+    return patent_list
+
+def save_csv(patent_list,csv_file,append = 0):
+    out_csv = csv_tools.csvLog(csv_file,append)
+    header_list = sort_headers(list(get_field_type_list(patent_list)))
+    if append == 0:
+        out_csv.add_row(header_list)
+    for patent in patent_list:
+        csv_row = []
+        for header in header_list:
+            value = filter_blank(patent.get(header) or "")
+            value = trim_leading_signes(value)
+            trim_leading_signes
+            csv_row.append(value)
+        out_csv.add_row(csv_row)
+            # if value !=None:
+            #     csv_row.append(value)
+            # else:
+            #     csv_row.append(value)
+    return out_csv
+
+def sort_headers(header_list):
+    not_href = [header for header in header_list if not re.match(".*href",header)]
+    href = [header for header in header_list if re.match(".*href",header)]
+    sorted_headers = sorted(not_href)+sorted(href)
+    return sorted_headers
+
+def get_field_type_list(patent_list):
+    field_type_list = set()
+    for patent in patent_list:
+        field_type_list.update(patent.keys())
+    return field_type_list
+
 if __name__ == '__main__':
-    INPUT_JSON_FILE = "..\\fips_input_data\\index13"
-    OUTPUT_CSV_FILE = "..\\fips_out_data\\out.csv"
-    with open(INPUT_JSON_FILE,mode = "r",encoding = "utf8") as input_json_file:
-        html = get_html(input_json_file)
-        patent_fields = parse_fields(html)
-        print(patent_fields)
+    # FIPS_PATENT_FOLDER = "..\\fips_input_data\\patent"
+    FIPS_PATENT_FOLDER = "..\\..\\data_patent"
+    FIPS_SOFT_FOLDER = "..\\..\\data_soft"
+    # INPUT_JSON_FILE = "..\\fips_input_data\\index13"
+    PATENT_OUTPUT_FILE = "..\\fips_out_data\\out_patent.csv"
+    SOFT_OUTPUT_FILE = "..\\fips_out_data\\out_soft.csv"
+    # data_type = FIPS_SOFT
+    data_type = FIPS_PATENT
+    if data_type == FIPS_PATENT:
+        data_folder = FIPS_PATENT_FOLDER
+        output_file = PATENT_OUTPUT_FILE
+    if data_type == FIPS_SOFT:
+        data_folder = FIPS_SOFT_FOLDER
+        output_file = SOFT_OUTPUT_FILE
+    file_list = get_file_list(data_folder,data_type)
+    patent_list = parse_files(file_list,data_type)
+    save_csv(patent_list,output_file)
+    exit(0)
+
+
     exit(0)
