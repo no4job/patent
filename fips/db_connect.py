@@ -52,7 +52,7 @@ class Database():
                     self.cursor.execute(query_str)
             else:
                 for query in query_list:
-                    query["func"](**query["data"])
+                    query["func"](query["data"])
             self.connection.commit()
         except Error as e:
             print ("Transaction failed, rolling back. Error was:")
@@ -61,10 +61,13 @@ class Database():
                 self.connection.rollback()
                 raise
             except:
+                raise
                 pass
     def query(self, query, params=None,commit = False):
         try:
             self.cursor.execute(query, params)
+            if commit:
+                self.connection.commit()
         except Error as e:
             print(e)
             raise
@@ -84,7 +87,7 @@ class Database():
         #return self.query(sql, data.values()).rowcount
         return self.query(sql, data,commit=commit).rowcount
 
-    def insert(self, **kwargs):
+    def insert(self, kwargs):
         """Insert a record"""
         if "commit" in kwargs:
             commit= kwargs.get('commit')

@@ -5,7 +5,11 @@ import re
 import csv
 import csv_tools
 import os
-# import db_connect
+import db_connect
+import common_config
+from datetime import datetime
+import hashlib
+import time
 
 from contextlib import suppress
 try:
@@ -14,6 +18,58 @@ try:
 except ImportError:
     print("lxml import error")
     raise
+INID_CODES = ['11','12','13','15','19',
+              '21','22','23','24','25','26','27',
+              '30','31','32','33','34',
+              '41','42','43','44','45','46','47','48',
+              '51','52','54','56','57','58',
+              '61','62','63','64','65','66','67','68',
+              '71','72','73','74','75','76',
+              '81','83','84','85','86_number','86_date','87_number','87_date','88',
+              '91','92','93','94','95','96','97']
+OTHER_FIELDS = {
+    "98":"98",
+    "11_href":"121",
+    "21_href":"122",
+    "43_href":"123",
+    "45_href":"124",
+    "125":"125",
+    "126":"126",
+    "status":"127",
+}
+TABLE_LIST = ["patent","patent_f_125","patent_f_126","patent_inid_15","patent_inid_21","patent_inid_22", \
+              "patent_inid_23","patent_inid_30","patent_inid_31","patent_inid_32","patent_inid_51","patent_inid_56", \
+              "patent_inid_71","patent_inid_73","patent_inid_74"]
+INID_CODES_IN_PATENT = ['11','12','13','19',
+                        '24',
+                        '33',
+                        '41','43','45','46',
+                        '54',
+                        '85','86','87'
+                        ]
+OTHER_FIELDS_IN_PATENT = {
+    "98":"98",
+    "11_href":"121",
+    "21_href":"122",
+    "43_href":"123",
+    "45_href":"124",
+    "status":"127"
+}
+FIELD_FORMAT = {'11':'string','12':'string','13':'string','15':'string','19':'string',
+                '21':'string','22':'date','23':'date','24':'date','25':'string','26':'string','27':'string',
+                '30':'string','31':'string','32':'date','33':'string','34':'string',
+                '41':'date','42':'date','43':'date','44':'date','45':'date','46':'date','47':'date','48':'date',
+                '51':'string','52':'string','54':'string','56':'string','57':'string','58':'string',
+                '61':'string/date','62':'string/date','63':'string/date','64':'string','65':'string',
+                '66':'string/date','67':'string/date','68':'string',
+                '71':'string','72':'string','73':'string','74':'string','75':'string','76':'string',
+                '81':'string','83':'string','84':'string','85':'date',
+                '86_nummer':'string','86_date':'date','87_nummer':'string','87_date':'date','88':'date',
+                '91':'date','92':'string/date','93':'string/date','94':'date','95':'string',
+                '96':'string','97':'date/string/string','98':'string',
+                '121':'string','122':'string','123':'string','124':'string',
+                '125':'string','126':'string','127':'string','128':'string'
+                }
 
 class dialect_tab(csv.excel):
     delimiter = '\t'
@@ -90,7 +146,12 @@ def parse_fields_fips_patent(html):
                     continue
                 bold_child=bold.xpath("child::*")
                 if len(bold_child) == 0 and bold.text != None:
-                    patent_field[field_code] = bold.text.strip()
+                    if field_code in ["86","87"]:
+                        fips_num_date = fips_get_num_date(bold.text.strip())
+                        patent_field[field_code+"_number"]=fips_num_date[0]
+                        patent_field[field_code+"_date"]=fips_num_date[1]
+                    else:
+                        patent_field[field_code] = bold.text.strip()
                     continue
                 if len(bold_child) == 0 and bold.text == None:
                     continue
@@ -115,8 +176,9 @@ def parse_fields_fips_patent(html):
                     if child.tail != None:
                         all_text+=" " + child.tail.strip()
                 if field_code in ["86","87"]:
-                    patent_field[field_code+"_number"]=re.sub("\\(.+\\)\\s*","",all_text).strip()
-                    patent_field[field_code+"_date"]=re.search("^[^\\(^\\)]*(\\(.+\\))s*").group(1).strip()
+                    fips_num_date = fips_get_num_date(all_text)
+                    patent_field[field_code+"_number"]=fips_num_date[0]
+                    patent_field[field_code+"_date"]=fips_num_date[1]
                     break
                 patent_field[field_code]=all_text
     ########################################################################
@@ -150,32 +212,38 @@ def parse_fields_fips_patent(html):
 
     return patent_field
 
+def fips_get_num_date(str):
+    number=re.sub("\\(.+\\)\\s*","",str).strip()
+    date=re.search("^[^\\(^\\)]*\\((.+)\\)s*",str).group(1).strip()
+    return [number,date]
 
 
 def fips_inid_fields_convert(code):
-    INID_CODES = ['10','11','12','13','15','19',
-                  '21','22','23','24','25','26','27',
-                  '30','31','32','33','34',
-                  '40','41','42','43','44','45','46','47','48',
-                  '50','51','52','54','56','57','58',
-                  '60','61','62','63','64','65','66','67','68',
-                  '70','71','72','73','74','75','76',
-                  '80','81','83','84','85','86','87','88',
-                  '90','91','92','93','94','95','96','97']
-    OTHER_FIELDS = {
-        "98":"98",
-        "11_href":"121",
-        "21_href":"122",
-        "43_href":"123",
-        "45_href":"124",
-        "status":"127"
-    }
-    if code.strip in INID_CODES:
-        return "inid_"+code.strip
-    elif code.strip in OTHER_FIELDS:
-        return "f_"+OTHER_FIELDS[code.strip]
+    # INID_CODES = ['10','11','12','13','15','19',
+    #               '21','22','23','24','25','26','27',
+    #               '30','31','32','33','34',
+    #               '40','41','42','43','44','45','46','47','48',
+    #               '50','51','52','54','56','57','58',
+    #               '60','61','62','63','64','65','66','67','68',
+    #               '70','71','72','73','74','75','76',
+    #               '80','81','83','84','85','86_number','86_date','87_number','87_date','88',
+    #               '90','91','92','93','94','95','96','97']
+    # OTHER_FIELDS = {
+    #     "98":"98",
+    #     "11_href":"121",
+    #     "21_href":"122",
+    #     "43_href":"123",
+    #     "45_href":"124",
+    #     "125":"125",
+    #     "126":"126",
+    #     "status":"127"
+    # }
+    if code.strip() in INID_CODES:
+        return "inid_"+code.strip()
+    elif code.strip() in OTHER_FIELDS.keys():
+        return "f_"+OTHER_FIELDS[code.strip()]
     else:
-        return code.strip
+        return code.strip()
 
 
 def parse_fields_fips_soft(html):
@@ -355,46 +423,37 @@ def save_csv(patent_list,csv_file,append = 0):
     return out_csv
 
 
-def save_db(db,patent_list,csv_file,append = 0):
-    # out_csv = csv_tools.csvLog(csv_file,append)
-    # header_list = sort_headers(list(get_field_type_list(patent_list)))
-    table_list = ["patent","patent_f125","patent_f126","patent_inid_15","patent_inid_21","patent_inid_22", \
-                  "patent_inid_23","patent_inid_31","patent_inid_32","patent_inid_51","patent_inid_56", \
-                  "patent_inid_71","patent_inid_73","patent_inid_74"]
-    INID_CODES_IN_PATENT = ['11','12','13','19',
-                            '24',
-                            '33',
-                            '41','43','45','46',
-                            '54',
-                            '85','86','87'
-                            ]
-    OTHER_FIELDS_IN_PATENT = {
-        "98":"98",
-        "11_href":"121",
-        "21_href":"122",
-        "43_href":"123",
-        "45_href":"124",
-        "status":"127"
-    }
+def save_db(db,patent_list,append=0):
     if append == 0:
         db.query("set foreign_key_checks=0")
-        db.truncate_table(table_list)
+        db.truncate_table(TABLE_LIST)
         db.query("set foreign_key_checks=1")
-    header_list = sort_headers(list(get_field_type_list(patent_list)))
-    sql={}
-    sql["func"]="insert"
+    # header_list = sort_headers(list(get_field_type_list(patent_list)))
+
     for patent in patent_list:
+        tr_list=[]
+        transaction={}
+        transaction["func"]=db.insert
         data={}
         data["table"]="patent"
-        for header in patent.keys:
+        params = {}
+        for header in patent.keys():
             value = filter_blank(patent.get(header) or "")
             value = trim_leading_signes(value)
-            column = fips_inid_fields_convert( value)
-            if column in INID_CODES_IN_PATENT or column in OTHER_FIELDS_IN_PATENT.values():
-                data[column]=patent[header]
-            else:
+            column = fips_inid_fields_convert(header)
+            if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
+                field_number=re.sub("^\w+_","",column)
+                if FIELD_FORMAT[field_number]=="date":
+                    # value = time.strftime('%Y.%m.%d',datetime.strptime(value, '%d.%m.%Y'))
+                    value = datetime.strptime(value, '%d.%m.%Y').strftime('%Y-%m-%d')
+                    # value = value.strftime('%Y.%m.%d')
+                params[column]=value
+            elif not(header.strip() in INID_CODES or header.strip() in OTHER_FIELDS.values()):
                 raise ParseException("Unknown parsed patent/aplication field")
-            sql["data"]=data
+        data["data"]=params
+        transaction["data"]=data
+        tr_list.append(transaction)
+        db.transaction(tr_list,sql_strings=False)
 
 
 def sort_headers(header_list):
@@ -426,7 +485,9 @@ if __name__ == "__main__":
         output_file = SOFT_OUTPUT_FILE
     file_list = get_file_list(data_folder,data_type)
     patent_list = parse_files(file_list,data_type)
-    save_csv(patent_list,output_file)
+    # save_csv(patent_list,output_file)
+    with db_connect.Database(**common_config.DATABASES['default']) as db:
+        save_db(db,patent_list)
     exit(0)
 
 
