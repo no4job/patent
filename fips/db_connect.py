@@ -7,6 +7,8 @@ from mysql.connector import Error
 import functools
 #import configparser
 #import os.path
+from fips import auto_id_wrapper
+
 
 
 class Database():
@@ -85,7 +87,8 @@ class Database():
         sql = "INSERT %s (%s) VALUES(%s)" % (table, query[0], query[1])
 
         #return self.query(sql, data.values()).rowcount
-        return self.query(sql, data,commit=commit).rowcount
+        cursor= self.query(sql, data,commit=commit)
+        return cursor.rowcount
 
     def insert(self, kwargs):
         """Insert a record"""
@@ -95,10 +98,18 @@ class Database():
             commit = False
         table=kwargs.get('table')
         data=kwargs.get('data')
+        for k,v in data.items():
+            if v.__class__.__name__ == 'auto_id_wrapper':
+                data[k]=v.get()
+        auto_id=kwargs.get('auto_id')
         query = self._serialize_insert(data)
+
         sql = "INSERT %s (%s) VALUES(%s)" % (table, query[0], query[1])
         #return self.query(sql, data.values()).rowcount
-        return self.query(sql, data,commit=commit).rowcount
+        # return self.query(sql, data,commit=commit).rowcount
+        cursor= self.query(sql, data,commit=commit)
+        auto_id.set(cursor.lastrowid)
+        return cursor.rowcount
 
     def _serialize_insert(self, data):
         """Format insert dict values into strings"""
@@ -121,6 +132,7 @@ class Database():
             self.connection.close()
             if not self.connection.is_connected():
                 print("Database connection with ID = %s closed." % str(self.connection_id))
+
 
 
 if __name__ == "__main__":

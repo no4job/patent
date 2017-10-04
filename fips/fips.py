@@ -10,6 +10,9 @@ import common_config
 from datetime import datetime
 import hashlib
 import time
+import doc_map
+from doc_map import fips_map
+import itertools
 
 from contextlib import suppress
 try:
@@ -36,6 +39,41 @@ OTHER_FIELDS = {
     "125":"125",
     "126":"126",
     "status":"127",
+}
+FIELDS_TO_TABLE_MAP = {
+    '11':'patent','12':'patent','13':'patent','19':'patent',
+    '24':'patent',
+    '33':'patent',
+    '41':'patent','43':'patent','45':'patent','46':'patent',
+    '54':'patent',
+    '85':'patent','86_date':'patent','86_number':'patent','87_date':'patent','87_number':'patent',
+    '98':'patent',
+    '121':'patent','122':'patent','123':'patent','124':'patent','126':'patent',
+    '15':'patent_inid_15',
+    '21':'patent_inid_21',
+    '22':'patent_inid_22',
+    '23':'patent_inid_23',
+    '30':'patent_inid_30',
+    '31':'patent_inid_31',
+    '32':'patent_inid_32',
+    '51':'patent_inid_51',
+    '56':'patent_inid_56',
+    '71':'patent_inid_71',
+    '73':'patent_inid_73',
+    '74':'patent_inid_74',
+    '125':'patent_f_125',
+    '127':'patent_f_127'
+}
+INID_CODES_IN_LINKED_TABLES = [
+              '15',
+              '21','22','23',
+              '30','31','32',
+              '51','56',
+              '71','73','74']
+
+OTHER_FIELDS_IN_LINKED_TABLES = {
+    "125":"125",
+    "126":"126"
 }
 TABLE_LIST = ["patent","patent_f_125","patent_f_126","patent_inid_15","patent_inid_21","patent_inid_22", \
               "patent_inid_23","patent_inid_30","patent_inid_31","patent_inid_32","patent_inid_51","patent_inid_56", \
@@ -70,6 +108,18 @@ FIELD_FORMAT = {'11':'string','12':'string','13':'string','15':'string','19':'st
                 '121':'string','122':'string','123':'string','124':'string',
                 '125':'string','126':'string','127':'string','128':'string'
                 }
+
+class auto_id_wrapper:
+    def __init__(self, auto_id=None):
+        self.auto_id=auto_id
+    def __int__(self):
+        return self.auto_id
+    def __long__(self):
+        return self.auto_id
+    def set(self,auto_id):
+        self.auto_id=auto_id
+    def get(self):
+        return self.auto_id
 
 class dialect_tab(csv.excel):
     delimiter = '\t'
@@ -423,37 +473,52 @@ def save_csv(patent_list,csv_file,append = 0):
     return out_csv
 
 
-def save_db(db,patent_list,append=0):
+def save_db(db,document_list,mapping,append=0):
     if append == 0:
         db.query("set foreign_key_checks=0")
-        db.truncate_table(TABLE_LIST)
+        db.truncate_table(mapping.all_table())
         db.query("set foreign_key_checks=1")
     # header_list = sort_headers(list(get_field_type_list(patent_list)))
-
-    for patent in patent_list:
-        tr_list=[]
-        transaction={}
-        transaction["func"]=db.insert
-        data={}
-        data["table"]="patent"
-        params = {}
-        for header in patent.keys():
-            value = filter_blank(patent.get(header) or "")
-            value = trim_leading_signes(value)
-            column = fips_inid_fields_convert(header)
-            if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
-                field_number=re.sub("^\w+_","",column)
-                if FIELD_FORMAT[field_number]=="date":
-                    # value = time.strftime('%Y.%m.%d',datetime.strptime(value, '%d.%m.%Y'))
+    for document in document_list:
+        transaction=[]
+        ref_table= {}
+        for table in document_table_list_ordered(document,mapping):
+            action={}
+            action["func"]=db.insert
+            data={}
+            data["table"]=table
+            params = {}
+            ref_table[table] = auto_id_wrapper()
+            data["auto_id"]=ref_table[table]
+            if not mapping.all_table_fk[table]["fk"]== "":
+                # mapping.all_table_fk[table]["fk"]
+                id = ref_table[mapping.all_table_fk[table]["ref_table"]]
+                column = mapping.all_table_fk[table]["fk"]
+                params[column] = id
+                # ref_field = mapping.all_table_fk[table]["ref_field"]
+            # for doc_field in document.keys():
+            for doc_field in table_field_list(document,table,mapping):
+                table_field_list(document,table,mapping)
+                value = filter_blank(document.get(doc_field) or "")
+                value = trim_leading_signes(value)
+                # column = fips_inid_fields_convert(doc_field)
+                # field_number=re.sub("^\w+_","",column)
+                field_type = mapping.get_attribute_doc_field(doc_field,"field_type")
+                if field_type=="date":
                     value = datetime.strptime(value, '%d.%m.%Y').strftime('%Y-%m-%d')
-                    # value = value.strftime('%Y.%m.%d')
+                column = mapping.get_attribute_doc_field(doc_field,"column_name")
                 params[column]=value
-            elif not(header.strip() in INID_CODES or header.strip() in OTHER_FIELDS.values()):
-                raise ParseException("Unknown parsed patent/aplication field")
-        data["data"]=params
-        transaction["data"]=data
-        tr_list.append(transaction)
-        db.transaction(tr_list,sql_strings=False)
+                # if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
+                # if  FIELDS_TO_TABLE_MAP == "patent":
+                #     params[column]=value
+                # if doc_field.strip() in INID_CODES_IN_LINKED_TABLES or doc_field.strip() in OTHER_FIELDS_IN_LINKED_TABLES.keys():
+                #
+                # else:
+                #     raise ParseException("Unknown parsed patent/aplication field")
+            data["data"]=params
+            action["data"]=data
+            transaction.append(action)
+        db.transaction(transaction,sql_strings=False)
 
 
 def sort_headers(header_list):
@@ -467,6 +532,35 @@ def get_field_type_list(patent_list):
     for patent in patent_list:
         field_type_list.update(patent.keys())
     return field_type_list
+
+def document_table_list(document,mapping):
+    table_list = set()
+    for doc_field in document.keys():
+        table_list.update([mapping.doc_map_by_doc_field[doc_field]['table']])
+    return table_list
+
+
+def table_field_list(document,table,mapping):
+    field_list = set()
+    for doc_field in document.keys():
+        if mapping.doc_map_by_doc_field[doc_field]['table']==table:
+            field_list.update([doc_field])
+    return field_list
+
+def document_table_list_ordered(document,mapping):
+    table_order=[]
+    table_list =document_table_list(document,mapping)
+    for table in table_list:
+        table_order.append([table,mapping.all_table_ordered[table]])
+    # table_order_list.sort()
+    # list(k for k,_ in itertools.groupby(k))
+    table_order=sorted(table_order, key=lambda table: table[1])
+    table_order_list = [table[0] for table in table_order]
+    return table_order_list
+
+
+def get_table(doc_field):
+    return fips_map.get_attribute_doc_field(doc_field,"table")
 
 if __name__ == "__main__":
     # FIPS_PATENT_FOLDER = "..\\fips_input_data\\patent"
@@ -486,8 +580,9 @@ if __name__ == "__main__":
     file_list = get_file_list(data_folder,data_type)
     patent_list = parse_files(file_list,data_type)
     # save_csv(patent_list,output_file)
+    mapping = doc_map.fips_map(doc_map.FIPS_PATENT_DOC_MAP)
     with db_connect.Database(**common_config.DATABASES['default']) as db:
-        save_db(db,patent_list)
+        save_db(db,patent_list,mapping)
     exit(0)
 
 
