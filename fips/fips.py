@@ -13,6 +13,7 @@ import time
 import doc_map
 from doc_map import fips_map
 import itertools
+import copy
 
 from contextlib import suppress
 try:
@@ -229,7 +230,7 @@ def parse_fields_fips_patent(html):
                     fips_num_date = fips_get_num_date(all_text)
                     patent_field[field_code+"_number"]=fips_num_date[0]
                     patent_field[field_code+"_date"]=fips_num_date[1]
-                    break
+                    continue
                 patent_field[field_code]=all_text
     ########################################################################
     ####  top items    ########################
@@ -312,11 +313,11 @@ def parse_fields_fips_soft(html):
     ####  top items    ########################
     #######################################################################
     with suppress(Exception):
-        patent_field["19"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text.strip()
+        patent_field["Идентификация органа, регистрирующего программу ЭВМ/базу данных"]=body.xpath("descendant-or-self::*[@id='top2']")[0].text.strip()
+    # with suppress(Exception):
+    #     patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text.strip()
     with suppress(Exception):
-        patent_field["11"]=body.xpath("descendant-or-self::*[@id='top4']/*[.!='']")[0].text.strip()
-    with suppress(Exception):
-        patent_field["12"]=body.xpath("descendant-or-self::*[@id='NameDoc']/b[.!='']")[0].text.strip()
+        patent_field["Cловесное обозначение вида документа"]=body.xpath("descendant-or-self::*[@id='NameDoc']/b[.!='']")[0].text.strip()
     with suppress(Exception):
         xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Номер регистрации (свидетельства)')]/descendant::a"
         patent_field["Номер регистрации (свидетельства)"]=body.xpath(xpath_str)[0].text.strip()
@@ -327,7 +328,7 @@ def parse_fields_fips_soft(html):
     with suppress(Exception):
         xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Номер и дата поступления заявки')]/descendant::b"
         all_text = re.split(" ",body.xpath(xpath_str)[0].text.strip())
-        patent_field["Номер поступления заявки"]=all_text[0]
+        patent_field["Номер заявки"]=all_text[0]
         patent_field["Дата поступления заявки"]=all_text[1]
     with suppress(Exception):
         xpath_str="descendant::table[@id='bib']/descendant::p[contains(.,'Дата публикации')]/descendant::a"
@@ -347,11 +348,15 @@ def parse_fields_fips_soft(html):
         rows = get_rows(element)
         patent_field["Правообладатель"]="; ".join(map(trim_signes,rows))
     with suppress(Exception):
+        xpath_str="descendant::p[contains(.,'создана') and contains(.,'государственному') and contains(.,'контракту')]"
+        if len(body.xpath(xpath_str))>0:
+            patent_field["Программа для ЭВМ/база данных создана по государственному контракту"]="ГК"
+    with suppress(Exception):
         xpath_str="descendant::p[contains(.,'Название базы данных')]/descendant::b"
-        patent_field["Название базы данных"]=body.xpath(xpath_str)[0].text_content().strip()
+        patent_field["Название программы ЭВМ/базы данных"]=body.xpath(xpath_str)[0].text_content().strip()
     with suppress(Exception):
         xpath_str="descendant::p[contains(.,'Название программы для ЭВМ')]/descendant::b"
-        patent_field["Название программы для ЭВМ"]=body.xpath(xpath_str)[0].text_content().strip()
+        patent_field["Название программы ЭВМ/базы данных"]=body.xpath(xpath_str)[0].text_content().strip()
     with suppress(Exception):
         xpath_str="descendant::b[contains(.,'Тип реализующей ЭВМ')]"
         patent_field["Тип реализующей ЭВМ"]=body.xpath(xpath_str)[0].tail.strip()
@@ -363,13 +368,13 @@ def parse_fields_fips_soft(html):
         patent_field["Вид и версия операционной системы"]=body.xpath(xpath_str)[0].tail.strip()
     with suppress(Exception):
         xpath_str="descendant::b[contains(.,'Объем базы данных')]"
-        patent_field["Объем базы данных"]=body.xpath(xpath_str)[0].tail.strip()
+        patent_field["Объем программы для ЭВМ/базы данных"]=body.xpath(xpath_str)[0].tail.strip()
     with suppress(Exception):
         xpath_str="descendant::b[contains(.,'Язык программирования')]"
         patent_field["Язык программирования"]=body.xpath(xpath_str)[0].tail.strip()
     with suppress(Exception):
         xpath_str="descendant::b[contains(.,'Объем программы для ЭВМ')]"
-        patent_field["Объем программы для ЭВМ"]=body.xpath(xpath_str)[0].tail.strip()
+        patent_field["Объем программы для ЭВМ/базы данных"]=body.xpath(xpath_str)[0].tail.strip()
     with suppress(Exception):
         xpath_str="descendant::p[@class='NameIzv']"
         izv_type=body.xpath(xpath_str)[0].text.strip()
@@ -447,10 +452,14 @@ def parse_files(file_list,data_type):
         parse_function =  parse_fields_fips_patent
     if data_type == FIPS_SOFT:
         parse_function =  parse_fields_fips_soft
-    patent_list=[]
+    patent_list={}
     for file in file_list:
         with open(file,mode = "r",encoding = "utf8") as input_file:
-            patent_list.append(parse_function(input_file.read()))
+            # patent_list.append(parse_function(input_file.read()))
+            result_ = parse_function(input_file.read())
+            result=result_
+            # patent_list[file]=parse_function(input_file.read())
+            patent_list[file]=result
     return patent_list
 
 def save_csv(patent_list,csv_file,append = 0):
@@ -479,47 +488,72 @@ def save_db(db,document_list,mapping,append=0):
         db.truncate_table(mapping.all_table())
         db.query("set foreign_key_checks=1")
     # header_list = sort_headers(list(get_field_type_list(patent_list)))
-    for document in document_list:
+    for file,document_ in document_list.items():
+        document = copy.deepcopy(document_)
         transaction=[]
         ref_table= {}
+        splitted_doc_field = None
+        splitt_result = []
         for table in document_table_list_ordered(document,mapping):
-            action={}
-            action["func"]=db.insert
-            data={}
-            data["table"]=table
-            params = {}
-            ref_table[table] = auto_id_wrapper()
-            data["auto_id"]=ref_table[table]
-            if not mapping.all_table_fk[table]["fk"]== "":
-                # mapping.all_table_fk[table]["fk"]
-                id = ref_table[mapping.all_table_fk[table]["ref_table"]]
-                column = mapping.all_table_fk[table]["fk"]
-                params[column] = id
-                # ref_field = mapping.all_table_fk[table]["ref_field"]
-            # for doc_field in document.keys():
-            for doc_field in table_field_list(document,table,mapping):
-                table_field_list(document,table,mapping)
-                value = filter_blank(document.get(doc_field) or "")
-                value = trim_leading_signes(value)
-                # column = fips_inid_fields_convert(doc_field)
-                # field_number=re.sub("^\w+_","",column)
-                field_type = mapping.get_attribute_doc_field(doc_field,"field_type")
-                if field_type=="date":
-                    value = datetime.strptime(value, '%d.%m.%Y').strftime('%Y-%m-%d')
-                column = mapping.get_attribute_doc_field(doc_field,"column_name")
-                params[column]=value
-                # if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
-                # if  FIELDS_TO_TABLE_MAP == "patent":
-                #     params[column]=value
-                # if doc_field.strip() in INID_CODES_IN_LINKED_TABLES or doc_field.strip() in OTHER_FIELDS_IN_LINKED_TABLES.keys():
-                #
-                # else:
-                #     raise ParseException("Unknown parsed patent/aplication field")
-            data["data"]=params
-            action["data"]=data
-            transaction.append(action)
+            split_count = 1
+            if table in mapping.all_table_split_field:
+                splitted_doc_field = mapping.all_table_split_field[table]['doc_field']
+                split_pattern = mapping.all_table_split_field[table]['split_pattern']
+                split_result = split_field(document.get(splitted_doc_field) or "",split_pattern)
+                split_count = len(split_result)
+            for count in range(split_count):
+                if split_count>1:
+                    document[splitted_doc_field]=split_result[count]
+                action={}
+                action["func"]=db.insert
+                data={}
+                data["table"]=table
+                params = {}
+                ref_table[table] = auto_id_wrapper()
+                data["auto_id"]=ref_table[table]
+                if not mapping.all_table_fk[table]["fk"]== "":
+                    # mapping.all_table_fk[table]["fk"]
+                    id = ref_table[mapping.all_table_fk[table]["ref_table"]]
+                    column = mapping.all_table_fk[table]["fk"]
+                    params[column] = id
+                    # ref_field = mapping.all_table_fk[table]["ref_field"]
+                # for doc_field in document.keys():
+                for doc_field in table_field_list(document,table,mapping):
+                    table_field_list(document,table,mapping)
+                    value = filter_blank(document.get(doc_field) or "")
+                    value = trim_leading_signes(value)
+                    # column = fips_inid_fields_convert(doc_field)
+                    # field_number=re.sub("^\w+_","",column)
+                    field_type = mapping.get_attribute_doc_field(doc_field,"field_type")
+                    if field_type=="date":
+                        if not value =="":
+                            value = datetime.strptime(value, '%d.%m.%Y').strftime('%Y-%m-%d')
+                        else:
+                            value = None
+                    column = mapping.get_attribute_doc_field(doc_field,"column_name")
+                    params[column]=value
+                    # if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
+                    # if  FIELDS_TO_TABLE_MAP == "patent":
+                    #     params[column]=value
+                    # if doc_field.strip() in INID_CODES_IN_LINKED_TABLES or doc_field.strip() in OTHER_FIELDS_IN_LINKED_TABLES.keys():
+                    #
+                    # else:
+                    #     raise ParseException("Unknown parsed patent/aplication field")
+                data["data"]=params
+                action["data"]=data
+                transaction.append(action)
         db.transaction(transaction,sql_strings=False)
+def split_field(str,pattern):
+    if str == "" or str == None:
+        return str
+    result = re.split(pattern,str)
+    if result == None:
+        return result
+    result =[row for row in result if not row.strip()==""]
+    # for row in result:
+    #     if row.strip()=="":
 
+    return result
 
 def sort_headers(header_list):
     not_href = [header for header in header_list if not re.match(".*href",header)]
@@ -547,6 +581,7 @@ def table_field_list(document,table,mapping):
             field_list.update([doc_field])
     return field_list
 
+
 def document_table_list_ordered(document,mapping):
     table_order=[]
     table_list =document_table_list(document,mapping)
@@ -569,8 +604,8 @@ if __name__ == "__main__":
     # INPUT_JSON_FILE = "..\\fips_input_data\\index13"
     PATENT_OUTPUT_FILE = "..\\fips_out_data\\out_patent.csv"
     SOFT_OUTPUT_FILE = "..\\fips_out_data\\out_soft.csv"
-    # data_type = FIPS_SOFT
-    data_type = FIPS_PATENT
+    data_type = FIPS_SOFT
+    # data_type = FIPS_PATENT
     if data_type == FIPS_PATENT:
         data_folder = FIPS_PATENT_FOLDER
         output_file = PATENT_OUTPUT_FILE
@@ -578,12 +613,11 @@ if __name__ == "__main__":
         data_folder = FIPS_SOFT_FOLDER
         output_file = SOFT_OUTPUT_FILE
     file_list = get_file_list(data_folder,data_type)
-    patent_list = parse_files(file_list,data_type)
+    document_list = parse_files(file_list,data_type)
     # save_csv(patent_list,output_file)
-    mapping = doc_map.fips_map(doc_map.FIPS_PATENT_DOC_MAP)
     with db_connect.Database(**common_config.DATABASES['default']) as db:
-        save_db(db,patent_list,mapping)
-    exit(0)
-
-
+        # mapping = doc_map.fips_map(doc_map.FIPS_PATENT_DOC_MAP)
+        # save_db(db,document_list,mapping)
+        mapping = doc_map.fips_map(doc_map.FIPS_SOFT_DOC_MAP)
+        save_db(db,document_list,mapping)
     exit(0)

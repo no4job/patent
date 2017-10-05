@@ -1,6 +1,7 @@
 __author__ = 'mdu'
 import itertools
 from collections import defaultdict
+from collections import Counter
 
 FIPS_PATENT_DOC_MAP = [
     {'doc_field':'11','field_id':'11','inid':True,'field_type':'string','column_name':'inid_11','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
@@ -13,6 +14,7 @@ FIPS_PATENT_DOC_MAP = [
     {'doc_field':'43','field_id':'43','inid':True,'field_type':'date','column_name':'inid_43','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
     {'doc_field':'45','field_id':'45','inid':True,'field_type':'date','column_name':'inid_45','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
     {'doc_field':'46','field_id':'46','inid':True,'field_type':'date','column_name':'inid_46','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'48','field_id':'48','inid':True,'field_type':'date','column_name':'inid_48','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
     {'doc_field':'54','field_id':'54','inid':True,'field_type':'string','column_name':'inid_54','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
     {'doc_field':'85','field_id':'85','inid':True,'field_type':'date','column_name':'inid_85','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
     {'doc_field':'86_date','field_id':'86_date','inid':True,'field_type':'date','column_name':'inid_86_date','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
@@ -34,24 +36,48 @@ FIPS_PATENT_DOC_MAP = [
     {'doc_field':'32','field_id':'32','inid':True,'field_type':'date','column_name':'inid_32','table':'patent_inid_32','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
     {'doc_field':'51','field_id':'51','inid':True,'field_type':'string','column_name':'inid_51','table':'patent_inid_51','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
     {'doc_field':'56','field_id':'56','inid':True,'field_type':'string','column_name':'inid_56','table':'patent_inid_56','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'71','field_id':'71','inid':True,'field_type':'string','column_name':'inid_71','table':'patent_inid_71','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'73','field_id':'73','inid':True,'field_type':'string','column_name':'inid_73','table':'patent_inid_73','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'74','field_id':'74','inid':True,'field_type':'string','column_name':'inid_74','table':'patent_inid_74','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
+    {'doc_field':'71','field_id':'71','inid':True,'field_type':'string','column_name':'inid_71','table':'patent_inid_71','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
+    {'doc_field':'72','field_id':'72','inid':True,'field_type':'string','column_name':'inid_72','table':'patent_inid_72','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
+    {'doc_field':'73','field_id':'73','inid':True,'field_type':'string','column_name':'inid_73','table':'patent_inid_73','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
+    {'doc_field':'74','field_id':'74','inid':True,'field_type':'string','column_name':'inid_74','table':'patent_inid_74','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
     {'doc_field':'125','field_id':'125','inid':False,'field_type':'string','column_name':'f_125','table':'patent_f_125','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
     {'doc_field':'status','field_id':'127','inid':False,'field_type':'string','column_name':'f_127','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''}
 ]
 
+FIPS_SOFT_DOC_MAP = [
+    {'doc_field':'Номер регистрации (свидетельства)','field_id':'11','inid':False,'field_type':'string','column_name':'f_11','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Cловесное обозначение вида документа','field_id':'12','inid':False,'field_type':'string','column_name':'f_12','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Идентификация органа, регистрирующего программу ЭВМ/базу данных','field_id':'19','inid':False,'field_type':'string','column_name':'f_19','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Номер заявки','field_id':'21','inid':False,'field_type':'string','column_name':'f_21','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Дата поступления заявки','field_id':'22','inid':False,'field_type':'date','column_name':'f_22','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Дата регистрации','field_id':'24','inid':False,'field_type':'date','column_name':'f_24','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Дата публикации','field_id':'45','inid':False,'field_type':'date','column_name':'f_45','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Название программы ЭВМ/базы данных','field_id':'54','inid':False,'field_type':'string','column_name':'f_54','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Автор','field_id':'72','inid':False,'field_type':'string','column_name':'f_72','table':'soft_f_72','ins_order':2,'ref_table':'soft','ref_field':'id','fk':'soft_id','split_pattern':'[;](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
+    {'doc_field':'Правообладатель','field_id':'73','inid':False,'field_type':'string','column_name':'f_73','table':'soft_f_73','ins_order':2,'ref_table':'soft','ref_field':'id','fk':'soft_id','split_pattern':'[;](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
+    {'doc_field':'Контактные реквизиты','field_id':'98','inid':False,'field_type':'string','column_name':'f_98','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Программа для ЭВМ/база данных создана по государственному контракту','field_id':'111','inid':False,'field_type':'string','column_name':'f_111','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Вид и версия операционной системы','field_id':'112','inid':False,'field_type':'string','column_name':'f_112','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Язык программирования','field_id':'113','inid':False,'field_type':'string','column_name':'f_113','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Вид и версия системы управления базой данных','field_id':'114','inid':False,'field_type':'string','column_name':'f_114','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Тип реализующей ЭВМ','field_id':'115','inid':False,'field_type':'string','column_name':'f_115','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Объем программы для ЭВМ/базы данных','field_id':'116','inid':False,'field_type':'string','column_name':'f_116','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Номер регистрации (свидетельства)_href','field_id':'121','inid':False,'field_type':'string','column_name':'f_121','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Дата публикации_href','field_id':'124','inid':False,'field_type':'string','column_name':'f_124','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Извещения об изменениях сведений','field_id':'125','inid':False,'field_type':'string','column_name':'f_125','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
+    {'doc_field':'Извещения об изменениях сведений_href','field_id':'126','inid':False,'field_type':'string','column_name':'f_126','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''}
+]
 
 class fips_map:
     def __init__(self, mapping):
         self.mapping=mapping
         self.doc_map_by_doc_field = self.doc_map_by_attribute('doc_field')
         self.doc_map_by_field_id=self.doc_map_by_attribute('field_id')
-        self.doc_map_by_column_name=self.doc_map_by_attribute('column_name')
+        # self.doc_map_by_column_name=self.doc_map_by_attribute('column_name')
         self.all_table_ordered = self.get_all_table_ordered()
         self.all_table_field = self.get_all_table_field()
         self.all_table_fk = self.get_all_table_fk()
-
+        self.all_table_split_field = self.get_all_table_split_field()
 
     def doc_map_by_attribute(self,attribute):
             if not attribute in ['doc_field','field_id','column_name']:
@@ -107,6 +133,23 @@ class fips_map:
         for table in  table_fk:
             all_table_fk[table[0]]={'ref_table':table[1],'ref_field':table[2],'fk':table[3]}
         return all_table_fk
+
+    def  get_all_table_split_field(self):
+        all_table_split_field ={}
+        table_split_field = []
+        for doc_field in self.doc_map_by_doc_field.keys():
+            if self.doc_map_by_doc_field[doc_field]['split_pattern'] == "":
+                continue
+            table_split_field.append([ self.doc_map_by_doc_field[doc_field]['table'],
+                              self.doc_map_by_doc_field[doc_field]['doc_field'],
+                              self.doc_map_by_doc_field[doc_field]['split_pattern']]
+                            )
+        table_split_field.sort()
+        table_split_field = list(table_fk for table_fk,_ in itertools.groupby(table_split_field))
+        for table in  table_split_field:
+            all_table_split_field[table[0]]={'doc_field':table[1],'split_pattern':table[2]}
+        # duplicates = [k for k, c in Counter(all_table_split_field.keys()).iteritems() if c > 1]
+        return all_table_split_field
 
     def get_attribute_doc_field(self,key,attribute):
         return self.doc_map_by_doc_field[key][attribute]
