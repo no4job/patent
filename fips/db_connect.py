@@ -66,6 +66,75 @@ class Database():
             except:
                 raise
                 pass
+    def test_duplicated_insert(self,query_list,exclude):
+        query = query_list[0]
+        table=query["data"].get('table')
+        data=query["data"].get('data')
+        # query = self._serialize_insert(data)
+        compare_str = ""
+        for k,v in data.items():
+            if k in exclude:
+                continue
+            compare_str+=k+"='"+v+"'"
+        if compare_str == "":
+            return None
+        sql = "select 1 from {} where {}".format(table, compare_str)
+        result = self.cursor.execute(query).rowcount
+        if not result:
+            return False
+        all_table = set(query["data"].get('table') for query in query_list[1:])
+        compared_inserted_data = {}
+        compared_db_data = {}
+        for table in all_table:
+            compared_inserted_data[table] = []
+            for query in query_list[1:]:
+                if query["data"].get('table')== table:
+                    data = query["data"].get('data')
+                    compared_inserted_data[table].append(data)
+
+        for table in all_table:
+            compared_db_data[table] = []
+            for query in query_list[1:]:
+                if query["data"].get('table')== table:
+                    data = query["data"].get('data')
+                    fk = query["data"].get('fk')
+                    field_list_str = ""
+                    for k in data.keys():
+                        if k in exclude:
+                            continue
+                        if field_list_str == "":
+                            field_list_str=k
+                        field_list_str+=","+k
+                    if field_list_str == "":
+                        break
+                    sql = "select {} from {}".format(table, field_list_str)
+                    compared_db_data[table] = self.cursor.execute(query).fetchall()
+
+        for table in all_table:
+            if self.compare_list_of_dict(compared_inserted_data[table],compared_db_data[table]):
+                return True
+        return False
+
+    def commare_list_of_dict(ld1,ld2):
+        key_list = ld1[0].keys()
+        all_dl = []
+        for ld in (ld1,ld2):
+            key_list = ld[0].keys()
+            dl = {}
+            for key in key_list:
+                dl[key]=[]
+                for d in ld:
+                    for k in d:
+                        if key == k:
+                            dl[k].append(d[k])
+                dl[key].sort()
+            all_dl.append(dl)
+        for key in key_list:
+            if all_dl[0]!=all_dl[0]:
+                return False
+        return True
+
+
     def query(self, query, params=None,commit = False):
         try:
             self.cursor.execute(query, params)
