@@ -14,6 +14,7 @@ import doc_map
 from doc_map import fips_map
 import itertools
 import copy
+import mysql.connector
 
 from contextlib import suppress
 try:
@@ -433,10 +434,10 @@ def inid_code_list():
 
 def get_file_list(dir_path,data_type):
     file_list=[]
-    if data_type == FIPS_PATENT:
+    if data_type == "FIPS_PATENT":
         pattern = "^index_[0-9]*\\.html$"
         test_function = test_for_fips_patent_file
-    if data_type == FIPS_SOFT:
+    if data_type == "FIPS_SOFT":
         pattern = "^index_[0-9]*\\.html$"
         test_function = test_for_fips_soft_file
     for subdir, dirs, files in os.walk(dir_path):
@@ -448,9 +449,9 @@ def get_file_list(dir_path,data_type):
     return file_list
 
 def parse_files(file_list,data_type):
-    if data_type == FIPS_PATENT:
+    if data_type == "FIPS_PATENT":
         parse_function =  parse_fields_fips_patent
-    if data_type == FIPS_SOFT:
+    if data_type == "FIPS_SOFT":
         parse_function =  parse_fields_fips_soft
     patent_list={}
     for file in file_list:
@@ -494,6 +495,7 @@ def save_db(db,document_list,mapping,append=0):
         ref_table= {}
         splitted_doc_field = None
         splitt_result = []
+        ref_table_all_fields = {}
         for table in document_table_list_ordered(document,mapping):
             split_count = 1
             if table in mapping.all_table_split_field:
@@ -509,11 +511,12 @@ def save_db(db,document_list,mapping,append=0):
                 data={}
                 data["table"]=table
                 params = {}
+
                 ref_table[table] = auto_id_wrapper()
                 data["auto_id"]=ref_table[table]
                 if not mapping.all_table_fk[table]["fk"]== "":
-                    # mapping.all_table_fk[table]["fk"]
-                    id = ref_table[mapping.all_table_fk[table]["ref_table"]]
+                    # id = ref_table[mapping.all_table_fk[table]["ref_table"]]
+                    id = ref_table_all_fields[ mapping.all_table_fk[table]["ref_field"]]
                     column = mapping.all_table_fk[table]["fk"]
                     params[column] = id
                     # ref_field = mapping.all_table_fk[table]["ref_field"]
@@ -532,6 +535,16 @@ def save_db(db,document_list,mapping,append=0):
                             value = None
                     column = mapping.get_attribute_doc_field(doc_field,"column_name")
                     params[column]=value
+                    if mapping.all_table_ordered[table]==1:
+                        ref_table_all_fields[column] = value
+                    if mapping.doc_map_by_doc_field[doc_field]["as_id"] == "1":
+                        value = re.sub("\s+","",value)
+                        column = column+"_id"
+                        params[column]=value
+                    if mapping.all_table_ordered[table]==1:
+                        ref_table_all_fields[column] = value
+
+
                     # if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
                     # if  FIELDS_TO_TABLE_MAP == "patent":
                     #     params[column]=value
@@ -542,7 +555,16 @@ def save_db(db,document_list,mapping,append=0):
                 data["data"]=params
                 action["data"]=data
                 transaction.append(action)
-        db.transaction(transaction,sql_strings=False)
+        try:
+            db.transaction(transaction,sql_strings=False)
+        except mysql.connector.IntegrityError as e:
+            if not e.args[0] == 1062:
+                raise
+            else:
+                print ("MY ERROR 1062: " + e.args[1])
+                if mapping.solve_duplicate(transaction,db)=="repeat":
+                    db.transaction(transaction,sql_strings=False)
+        # db.transaction(transaction,sql_strings=False)
 def split_field(str,pattern):
     if str == "" or str == None:
         return str
@@ -597,6 +619,19 @@ def document_table_list_ordered(document,mapping):
 def get_table(doc_field):
     return fips_map.get_attribute_doc_field(doc_field,"table")
 
+def import_to_db(data_folder,db,data_type):
+    mapping = doc_map.fips_map(data_type)
+    file_list = get_file_list(data_folder,data_type)
+    document_list = parse_files(file_list,data_type)
+    save_db(db,document_list,mapping)
+
+
+def import_to_csv(data_folder,output_file,data_type):
+    file_list = get_file_list(data_folder,data_type)
+    document_list = parse_files(file_list,data_type)
+    save_csv(document_list,output_file)
+
+
 if __name__ == "__main__":
     # FIPS_PATENT_FOLDER = "..\\fips_input_data\\patent"
     FIPS_PATENT_FOLDER = "..\\..\\data_patent"
@@ -604,20 +639,29 @@ if __name__ == "__main__":
     # INPUT_JSON_FILE = "..\\fips_input_data\\index13"
     PATENT_OUTPUT_FILE = "..\\fips_out_data\\out_patent.csv"
     SOFT_OUTPUT_FILE = "..\\fips_out_data\\out_soft.csv"
-    data_type = FIPS_SOFT
-    # data_type = FIPS_PATENT
-    if data_type == FIPS_PATENT:
+    # data_type = FIPS_SOFT
+    # # data_type = FIPS_PATENT
+    # if data_type == FIPS_PATENT:
+    #     data_folder = FIPS_PATENT_FOLDER
+    #     output_file = PATENT_OUTPUT_FILE
+    #     mapping = FIPS_PATENT_DOC_MAP
+    # if data_type == FIPS_SOFT:
+    #     data_folder = FIPS_SOFT_FOLDER
+    #     output_file = SOFT_OUTPUT_FILE
+    #     mapping = FIPS_SOFT_DOC_MAP
+    # file_list = get_file_list(data_folder,data_type)
+    # document_list = parse_files(file_list,data_type)
+    # # save_csv(patent_list,output_file)
+    with db_connect.Database(**common_config.DATABASES['default']) as db:
+        data_type = "FIPS_PATENT"
         data_folder = FIPS_PATENT_FOLDER
         output_file = PATENT_OUTPUT_FILE
-    if data_type == FIPS_SOFT:
+        import_to_db(data_folder,db,data_type)
+        # import_to_csv(data_folder,output_file,data_type)
+
+        data_type = "FIPS_SOFT"
         data_folder = FIPS_SOFT_FOLDER
         output_file = SOFT_OUTPUT_FILE
-    file_list = get_file_list(data_folder,data_type)
-    document_list = parse_files(file_list,data_type)
-    # save_csv(patent_list,output_file)
-    with db_connect.Database(**common_config.DATABASES['default']) as db:
-        # mapping = doc_map.fips_map(doc_map.FIPS_PATENT_DOC_MAP)
-        # save_db(db,document_list,mapping)
-        mapping = doc_map.fips_map(doc_map.FIPS_SOFT_DOC_MAP)
-        save_db(db,document_list,mapping)
+        import_to_db(data_folder,db,data_type)
+        # import_to_csv(data_folder,output_file,data_type)
     exit(0)

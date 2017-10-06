@@ -1,76 +1,117 @@
 __author__ = 'mdu'
 import itertools
+import re
+from datetime import datetime
 from collections import defaultdict
 from collections import Counter
 
-FIPS_PATENT_DOC_MAP = [
-    {'doc_field':'11','field_id':'11','inid':True,'field_type':'string','column_name':'inid_11','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'12','field_id':'12','inid':True,'field_type':'string','column_name':'inid_12','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'13','field_id':'13','inid':True,'field_type':'string','column_name':'inid_13','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'19','field_id':'19','inid':True,'field_type':'string','column_name':'inid_19','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'24','field_id':'24','inid':True,'field_type':'date','column_name':'inid_24','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'33','field_id':'33','inid':True,'field_type':'string','column_name':'inid_33','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'41','field_id':'41','inid':True,'field_type':'date','column_name':'inid_41','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'43','field_id':'43','inid':True,'field_type':'date','column_name':'inid_43','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'45','field_id':'45','inid':True,'field_type':'date','column_name':'inid_45','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'46','field_id':'46','inid':True,'field_type':'date','column_name':'inid_46','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'48','field_id':'48','inid':True,'field_type':'date','column_name':'inid_48','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'54','field_id':'54','inid':True,'field_type':'string','column_name':'inid_54','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'85','field_id':'85','inid':True,'field_type':'date','column_name':'inid_85','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'86_date','field_id':'86_date','inid':True,'field_type':'date','column_name':'inid_86_date','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'86_number','field_id':'86_number','inid':True,'field_type':'string','column_name':'inid_86_number','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'87_date','field_id':'87_date','inid':True,'field_type':'date','column_name':'inid_87_date','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'87_number','field_id':'87_number','inid':True,'field_type':'string','column_name':'inid_87_number','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'98','field_id':'98','inid':False,'field_type':'string','column_name':'f_98','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'11_href','field_id':'121','inid':False,'field_type':'string','column_name':'f_121','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'21_href','field_id':'122','inid':False,'field_type':'string','column_name':'f_122','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'43_href','field_id':'123','inid':False,'field_type':'string','column_name':'f_123','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'45_href','field_id':'124','inid':False,'field_type':'string','column_name':'f_124','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'126','field_id':'126','inid':False,'field_type':'string','column_name':'f_126','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'15','field_id':'15','inid':True,'field_type':'string','column_name':'inid_15','table':'patent_inid_15','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'21','field_id':'21','inid':True,'field_type':'string','column_name':'inid_21','table':'patent_inid_21','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'22','field_id':'22','inid':True,'field_type':'date','column_name':'inid_22','table':'patent_inid_22','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'23','field_id':'23','inid':True,'field_type':'date','column_name':'inid_23','table':'patent_inid_23','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'30','field_id':'30','inid':True,'field_type':'string','column_name':'inid_30','table':'patent_inid_30','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'31','field_id':'31','inid':True,'field_type':'string','column_name':'inid_31','table':'patent_inid_31','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'32','field_id':'32','inid':True,'field_type':'date','column_name':'inid_32','table':'patent_inid_32','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'51','field_id':'51','inid':True,'field_type':'string','column_name':'inid_51','table':'patent_inid_51','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'56','field_id':'56','inid':True,'field_type':'string','column_name':'inid_56','table':'patent_inid_56','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'71','field_id':'71','inid':True,'field_type':'string','column_name':'inid_71','table':'patent_inid_71','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
-    {'doc_field':'72','field_id':'72','inid':True,'field_type':'string','column_name':'inid_72','table':'patent_inid_72','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
-    {'doc_field':'73','field_id':'73','inid':True,'field_type':'string','column_name':'inid_73','table':'patent_inid_73','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
-    {'doc_field':'74','field_id':'74','inid':True,'field_type':'string','column_name':'inid_74','table':'patent_inid_74','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
-    {'doc_field':'125','field_id':'125','inid':False,'field_type':'string','column_name':'f_125','table':'patent_f_125','ins_order':2,'ref_table':'patent','ref_field':'id','fk':'patent_id','split_pattern':';'},
-    {'doc_field':'status','field_id':'127','inid':False,'field_type':'string','column_name':'f_127','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''}
+FIPS_PATENT_MAP = [
+    {'doc_field':'11','field_id':'11','inid':True,'field_type':'string','column_name':'inid_11','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':'1'},
+    {'doc_field':'12','field_id':'12','inid':True,'field_type':'string','column_name':'inid_12','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'13','field_id':'13','inid':True,'field_type':'string','column_name':'inid_13','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'19','field_id':'19','inid':True,'field_type':'string','column_name':'inid_19','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'24','field_id':'24','inid':True,'field_type':'date','column_name':'inid_24','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'33','field_id':'33','inid':True,'field_type':'string','column_name':'inid_33','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'41','field_id':'41','inid':True,'field_type':'date','column_name':'inid_41','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'43','field_id':'43','inid':True,'field_type':'date','column_name':'inid_43','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'45','field_id':'45','inid':True,'field_type':'date','column_name':'inid_45','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'46','field_id':'46','inid':True,'field_type':'date','column_name':'inid_46','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'48','field_id':'48','inid':True,'field_type':'date','column_name':'inid_48','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'54','field_id':'54','inid':True,'field_type':'string','column_name':'inid_54','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'85','field_id':'85','inid':True,'field_type':'date','column_name':'inid_85','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'86_date','field_id':'86_date','inid':True,'field_type':'date','column_name':'inid_86_date','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'86_number','field_id':'86_number','inid':True,'field_type':'string','column_name':'inid_86_number','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'87_date','field_id':'87_date','inid':True,'field_type':'date','column_name':'inid_87_date','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'87_number','field_id':'87_number','inid':True,'field_type':'string','column_name':'inid_87_number','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'98','field_id':'98','inid':False,'field_type':'string','column_name':'f_98','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'11_href','field_id':'121','inid':False,'field_type':'string','column_name':'f_121','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'21_href','field_id':'122','inid':False,'field_type':'string','column_name':'f_122','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'43_href','field_id':'123','inid':False,'field_type':'string','column_name':'f_123','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'45_href','field_id':'124','inid':False,'field_type':'string','column_name':'f_124','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'126','field_id':'126','inid':False,'field_type':'string','column_name':'f_126','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'15','field_id':'15','inid':True,'field_type':'string','column_name':'inid_15','table':'patent_inid_15','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'21','field_id':'21','inid':True,'field_type':'string','column_name':'inid_21','table':'patent_inid_21','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'22','field_id':'22','inid':True,'field_type':'date','column_name':'inid_22','table':'patent_inid_22','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'23','field_id':'23','inid':True,'field_type':'date','column_name':'inid_23','table':'patent_inid_23','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'30','field_id':'30','inid':True,'field_type':'string','column_name':'inid_30','table':'patent_inid_30','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'31','field_id':'31','inid':True,'field_type':'string','column_name':'inid_31','table':'patent_inid_31','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'32','field_id':'32','inid':True,'field_type':'date','column_name':'inid_32','table':'patent_inid_32','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'51','field_id':'51','inid':True,'field_type':'string','column_name':'inid_51','table':'patent_inid_51','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'56','field_id':'56','inid':True,'field_type':'string','column_name':'inid_56','table':'patent_inid_56','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'71','field_id':'71','inid':True,'field_type':'string','column_name':'inid_71','table':'patent_inid_71','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))','as_id':''},
+    {'doc_field':'72','field_id':'72','inid':True,'field_type':'string','column_name':'inid_72','table':'patent_inid_72','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))','as_id':''},
+    {'doc_field':'73','field_id':'73','inid':True,'field_type':'string','column_name':'inid_73','table':'patent_inid_73','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))','as_id':''},
+    {'doc_field':'74','field_id':'74','inid':True,'field_type':'string','column_name':'inid_74','table':'patent_inid_74','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':'[;,](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))','as_id':''},
+    {'doc_field':'125','field_id':'125','inid':False,'field_type':'string','column_name':'f_125','table':'patent_f_125','ins_order':2,'ref_table':'patent','ref_field':'inid_11_id','fk':'patent_id','split_pattern':';','as_id':''},
+    {'doc_field':'status','field_id':'127','inid':False,'field_type':'string','column_name':'f_127','table':'patent','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''}
 ]
 
-FIPS_SOFT_DOC_MAP = [
-    {'doc_field':'Номер регистрации (свидетельства)','field_id':'11','inid':False,'field_type':'string','column_name':'f_11','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Cловесное обозначение вида документа','field_id':'12','inid':False,'field_type':'string','column_name':'f_12','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Идентификация органа, регистрирующего программу ЭВМ/базу данных','field_id':'19','inid':False,'field_type':'string','column_name':'f_19','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Номер заявки','field_id':'21','inid':False,'field_type':'string','column_name':'f_21','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Дата поступления заявки','field_id':'22','inid':False,'field_type':'date','column_name':'f_22','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Дата регистрации','field_id':'24','inid':False,'field_type':'date','column_name':'f_24','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Дата публикации','field_id':'45','inid':False,'field_type':'date','column_name':'f_45','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Название программы ЭВМ/базы данных','field_id':'54','inid':False,'field_type':'string','column_name':'f_54','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Автор','field_id':'72','inid':False,'field_type':'string','column_name':'f_72','table':'soft_f_72','ins_order':2,'ref_table':'soft','ref_field':'id','fk':'soft_id','split_pattern':'[;](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
-    {'doc_field':'Правообладатель','field_id':'73','inid':False,'field_type':'string','column_name':'f_73','table':'soft_f_73','ins_order':2,'ref_table':'soft','ref_field':'id','fk':'soft_id','split_pattern':'[;](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))'},
-    {'doc_field':'Контактные реквизиты','field_id':'98','inid':False,'field_type':'string','column_name':'f_98','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Программа для ЭВМ/база данных создана по государственному контракту','field_id':'111','inid':False,'field_type':'string','column_name':'f_111','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Вид и версия операционной системы','field_id':'112','inid':False,'field_type':'string','column_name':'f_112','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Язык программирования','field_id':'113','inid':False,'field_type':'string','column_name':'f_113','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Вид и версия системы управления базой данных','field_id':'114','inid':False,'field_type':'string','column_name':'f_114','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Тип реализующей ЭВМ','field_id':'115','inid':False,'field_type':'string','column_name':'f_115','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Объем программы для ЭВМ/базы данных','field_id':'116','inid':False,'field_type':'string','column_name':'f_116','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Номер регистрации (свидетельства)_href','field_id':'121','inid':False,'field_type':'string','column_name':'f_121','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Дата публикации_href','field_id':'124','inid':False,'field_type':'string','column_name':'f_124','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Извещения об изменениях сведений','field_id':'125','inid':False,'field_type':'string','column_name':'f_125','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''},
-    {'doc_field':'Извещения об изменениях сведений_href','field_id':'126','inid':False,'field_type':'string','column_name':'f_126','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':''}
+def fips_patent_solve_duplicate(transaction,db):
+    duplicate = transaction[0]['data']['data']['inid_11']
+    comared_field_sql= "select f_127 from patent where inid_11 = '{}'".format(duplicate)
+    comared_field_in_db = db.query(comared_field_sql).fetchall()[0][0] or ""
+    comared_field_in_transaction = transaction[0]['data']['data']['f_127']
+    # dates_in_comared_field_in_db = re.search("[\\d]{1,2}\\.[\\d]{1,2}\\.[\\d]{2,4}").sort()
+    dates_in_comared_field_in_transaction = re.findall("[\\d]{1,2}\\.[\\d]{1,2}\\.[\\d]{2,4}",comared_field_in_transaction)
+    dates_in_comared_field_in_transaction =sorted( [datetime.strptime(d, '%d.%m.%Y') for d in   dates_in_comared_field_in_transaction], reverse=True)
+    if dates_in_comared_field_in_transaction == None or len(dates_in_comared_field_in_transaction) == 0:
+        return "skip"
+    dates_in_comared_field_in_db = re.findall("[\\d]{1,2}\\.[\\d]{1,2}\\.[\\d]{2,4}",comared_field_in_db)
+    dates_in_comared_field_in_db =sorted( [datetime.strptime(d, '%d.%m.%Y') for d in   dates_in_comared_field_in_db], reverse=True)
+    if dates_in_comared_field_in_db == None or len(dates_in_comared_field_in_db) == 0:
+        delete_sql= "delete from patent where inid_11 = '{}'".format(duplicate)
+        db.query(delete_sql,commit=True)
+        return "repeat"
+    if dates_in_comared_field_in_transaction[0]> dates_in_comared_field_in_db[0]:
+        delete_sql= "delete from patent where inid_11 = '{}'".format(duplicate)
+        db.query(delete_sql,commit=True)
+        return "repeat"
+    else:
+        return "skip"
+
+
+FIPS_SOFT_MAP = [
+    {'doc_field':'Номер регистрации (свидетельства)','field_id':'11','inid':False,'field_type':'string','column_name':'f_11','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':'1'},
+    {'doc_field':'Cловесное обозначение вида документа','field_id':'12','inid':False,'field_type':'string','column_name':'f_12','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Идентификация органа, регистрирующего программу ЭВМ/базу данных','field_id':'19','inid':False,'field_type':'string','column_name':'f_19','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Номер заявки','field_id':'21','inid':False,'field_type':'string','column_name':'f_21','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Дата поступления заявки','field_id':'22','inid':False,'field_type':'date','column_name':'f_22','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Дата регистрации','field_id':'24','inid':False,'field_type':'date','column_name':'f_24','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Дата публикации','field_id':'45','inid':False,'field_type':'date','column_name':'f_45','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Название программы ЭВМ/базы данных','field_id':'54','inid':False,'field_type':'string','column_name':'f_54','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Автор','field_id':'72','inid':False,'field_type':'string','column_name':'f_72','table':'soft_f_72','ins_order':2,'ref_table':'soft','ref_field':'f_11_id','fk':'soft_id','split_pattern':'[;](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))','as_id':''},
+    {'doc_field':'Правообладатель','field_id':'73','inid':False,'field_type':'string','column_name':'f_73','table':'soft_f_73','ins_order':2,'ref_table':'soft','ref_field':'f_11_id','fk':'soft_id','split_pattern':'[;](?!\\s*(?:ЛТД|ЭлЭлСи|ИНК|ЛЛК))','as_id':''},
+    {'doc_field':'Контактные реквизиты','field_id':'98','inid':False,'field_type':'string','column_name':'f_98','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Программа для ЭВМ/база данных создана по государственному контракту','field_id':'111','inid':False,'field_type':'string','column_name':'f_111','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Вид и версия операционной системы','field_id':'112','inid':False,'field_type':'string','column_name':'f_112','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Язык программирования','field_id':'113','inid':False,'field_type':'string','column_name':'f_113','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Вид и версия системы управления базой данных','field_id':'114','inid':False,'field_type':'string','column_name':'f_114','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Тип реализующей ЭВМ','field_id':'115','inid':False,'field_type':'string','column_name':'f_115','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Объем программы для ЭВМ/базы данных','field_id':'116','inid':False,'field_type':'string','column_name':'f_116','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Номер регистрации (свидетельства)_href','field_id':'121','inid':False,'field_type':'string','column_name':'f_121','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Дата публикации_href','field_id':'124','inid':False,'field_type':'string','column_name':'f_124','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Извещения об изменениях сведений','field_id':'125','inid':False,'field_type':'string','column_name':'f_125','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''},
+    {'doc_field':'Извещения об изменениях сведений_href','field_id':'126','inid':False,'field_type':'string','column_name':'f_126','table':'soft','ins_order':1,'ref_table':'','ref_field':'','fk':'','split_pattern':'','as_id':''}
 ]
+
+def fips_soft_solve_duplicate(transaction,db):
+    pass
 
 class fips_map:
-    def __init__(self, mapping):
-        self.mapping=mapping
+    def map_options (self,x):
+            return {
+                'FIPS_PATENT': FIPS_PATENT_MAP,
+                'FIPS_SOFT': FIPS_SOFT_MAP
+            }.get(x, None)
+    def solve_duplicate_options (self,x):
+        return {
+            'FIPS_PATENT': fips_patent_solve_duplicate,
+            'FIPS_SOFT': fips_soft_solve_duplicate
+        }.get(x, None)
+
+    def __init__(self, data_type):
+        self.mapping=self.map_options(data_type)
+        self.solve_duplicate= self.solve_duplicate_options(data_type)
         self.doc_map_by_doc_field = self.doc_map_by_attribute('doc_field')
         self.doc_map_by_field_id=self.doc_map_by_attribute('field_id')
         # self.doc_map_by_column_name=self.doc_map_by_attribute('column_name')

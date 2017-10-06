@@ -31,7 +31,8 @@ class Database():
                                                       database=self.database,
                                                       user=self.user,
                                                       password=self.password,
-                                                      autocommit=self.autocommit
+                                                      autocommit=self.autocommit,
+                                                      buffered=True
                                                       )
             if self.connection.is_connected():
                 self.connection_id = self.connection.connection_id
