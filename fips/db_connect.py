@@ -7,7 +7,7 @@ from mysql.connector import Error
 import functools
 #import configparser
 #import os.path
-from fips import auto_id_wrapper
+# from fips import auto_id_wrapper
 
 
 
@@ -66,6 +66,8 @@ class Database():
             except:
                 raise
                 pass
+    def compare_result_set(self):
+        pass
     def test_duplicated_insert(self,query_list,exclude):
         query = query_list[0]
         table=query["data"].get('table')
@@ -167,10 +169,14 @@ class Database():
         else:
             commit = False
         table=kwargs.get('table')
-        data=kwargs.get('data')
-        for k,v in data.items():
-            if v.__class__.__name__ == 'auto_id_wrapper':
+        # data=kwargs.get('data')
+        data_=kwargs.get('data')
+        data={}
+        for k,v in data_.items():
+            if v.__class__.__name__ == 'id_wrapper':
                 data[k]=v.get()
+            else:
+                data[k]=v
         auto_id=kwargs.get('auto_id')
         query = self._serialize_insert(data)
 

@@ -111,17 +111,23 @@ FIELD_FORMAT = {'11':'string','12':'string','13':'string','15':'string','19':'st
                 '125':'string','126':'string','127':'string','128':'string'
                 }
 
-class auto_id_wrapper:
-    def __init__(self, auto_id=None):
-        self.auto_id=auto_id
-    def __int__(self):
-        return self.auto_id
-    def __long__(self):
-        return self.auto_id
-    def set(self,auto_id):
-        self.auto_id=auto_id
+class id_wrapper:
+    def __init__(self,id=None,suffix=""):
+        self.id=id
+        self.suffix = suffix
+    def set(self,id):
+        self.id=id
+    def set_suffix(self,suffix):
+        self.suffix=suffix
     def get(self):
-        return self.auto_id
+        if self.id == None:
+            return None
+        return self.id+self.suffix
+    def get_suffix():
+        if self.suffix == None:
+            return None
+        return self.suffix
+
 
 class dialect_tab(csv.excel):
     delimiter = '\t'
@@ -489,6 +495,7 @@ def save_db(db,document_list,mapping,append=0):
         db.truncate_table(mapping.all_table())
         db.query("set foreign_key_checks=1")
     # header_list = sort_headers(list(get_field_type_list(patent_list)))
+    # while True
     for file,document_ in document_list.items():
         document = copy.deepcopy(document_)
         transaction=[]
@@ -496,6 +503,7 @@ def save_db(db,document_list,mapping,append=0):
         splitted_doc_field = None
         splitt_result = []
         ref_table_all_fields = {}
+        id = None
         for table in document_table_list_ordered(document,mapping):
             split_count = 1
             if table in mapping.all_table_split_field:
@@ -512,11 +520,17 @@ def save_db(db,document_list,mapping,append=0):
                 data["table"]=table
                 params = {}
 
-                ref_table[table] = auto_id_wrapper()
+                ref_table[table] = id_wrapper()
                 data["auto_id"]=ref_table[table]
                 if not mapping.all_table_fk[table]["fk"]== "":
                     # id = ref_table[mapping.all_table_fk[table]["ref_table"]]
                     id = ref_table_all_fields[ mapping.all_table_fk[table]["ref_field"]]
+                    # as_id = id
+                    # if record_sub_number == 0:
+                    #     id = ref_table_all_fields[ mapping.all_table_fk[table]["ref_field"]]
+                    # else:
+                    #     id = ref_table_all_fields[ mapping.all_table_fk[table]["ref_field"]]+"@{}".format(record_sub_number)
+
                     column = mapping.all_table_fk[table]["fk"]
                     params[column] = id
                     # ref_field = mapping.all_table_fk[table]["ref_field"]
@@ -535,14 +549,16 @@ def save_db(db,document_list,mapping,append=0):
                             value = None
                     column = mapping.get_attribute_doc_field(doc_field,"column_name")
                     params[column]=value
-                    if mapping.all_table_ordered[table]==1:
-                        ref_table_all_fields[column] = value
+                    # if mapping.all_table_ordered[table]==1:
+                    #     ref_table_all_fields[column] = value
                     if mapping.doc_map_by_doc_field[doc_field]["as_id"] == "1":
                         value = re.sub("\s+","",value)
                         column = column+"_id"
-                        params[column]=value
+                        # params[column]=value
+                        params[column]=id_wrapper(value)
                     if mapping.all_table_ordered[table]==1:
-                        ref_table_all_fields[column] = value
+                        # ref_table_all_fields[column] = value
+                        ref_table_all_fields[column] = params[column]
 
 
                     # if header.strip() in INID_CODES_IN_PATENT or header.strip() in OTHER_FIELDS_IN_PATENT.keys():
@@ -555,16 +571,27 @@ def save_db(db,document_list,mapping,append=0):
                 data["data"]=params
                 action["data"]=data
                 transaction.append(action)
-        try:
-            db.transaction(transaction,sql_strings=False)
-        except mysql.connector.IntegrityError as e:
-            if not e.args[0] == 1062:
-                raise
-            else:
-                print ("MY ERROR 1062: " + e.args[1])
-                if mapping.solve_duplicate(transaction,db)=="repeat":
-                    db.transaction(transaction,sql_strings=False)
-        # db.transaction(transaction,sql_strings=False)
+
+        record_sub_number = 1
+        while True:
+            try:
+                # db.transaction(transaction,sql_strings=False)
+                db.transaction(transaction,sql_strings=False)
+                break
+            except mysql.connector.IntegrityError as e:
+                if not e.args[0] == 1062:
+                    raise
+                else:
+                    print ("MY ERROR 1062: " + e.args[1])
+                    id.set_suffix("@{:03d}".format(record_sub_number))
+                    record_sub_number+=1
+                    if record_sub_number > 100:
+                        print ("Maximum number (100) of subrecords exceeded")
+                        raise
+                    # if mapping.solve_duplicate(transaction,db)=="repeat":
+                    #     db.transaction(transaction,sql_strings=False)
+
+
 def split_field(str,pattern):
     if str == "" or str == None:
         return str
